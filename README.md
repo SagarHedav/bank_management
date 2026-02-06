@@ -121,4 +121,5 @@ npm start          # cd server && npm start
 ```
 
 ## 🙌 Credits
-Built by Sahil Talreja.
+Built by Sagar Hedav
+
