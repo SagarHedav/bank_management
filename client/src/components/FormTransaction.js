@@ -1,0 +1,176 @@
+import React, { useEffect, useState } from "react";
+import useToast from '../hooks/useToast';
+import Toast from './Toast';
+import { getApiUrl, API_ENDPOINTS, makeApiRequest } from '../utils/api';
+
+const FormTransaction = () => {
+  const [account_id, SetAccid] = useState("");
+  const [branch_id, SetBrid] = useState("");
+  const [branches, setBranches] = useState([]);
+  const [amount, SetAmt] = useState("");
+  const [loading, setLoading] = useState(false);
+  
+  // Toast integration
+  const { toast, showToast } = useToast();
+  
+  const GetAccountID = () => {
+    const parameters = window.location.search.substring(1).split("&");
+    const temp = parameters[0].split("=");
+    console.log(parameters);
+    console.log(temp);
+    SetAccid(temp[1]);
+    
+  };
+  
+  // Load branches for dropdown
+  const LoadBranches = async () => {
+    try {
+      const res = await fetch(getApiUrl(API_ENDPOINTS.BRANCHES));
+      const data = await res.json();
+      const list = data.success ? data.branches : data;
+      setBranches(list || []);
+    } catch (e) {
+      console.error('Failed to load branches', e);
+      setBranches([]);
+    }
+  };
+
+  useEffect(() => {
+    GetAccountID();
+    LoadBranches();
+  }, []);
+  
+  const DoTransaction = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    const action = document.getElementById("inputState").value;
+    
+    // Validate inputs
+    if (!account_id) {
+      showToast("Account ID is missing. Please return to customer panel and try again.", "error");
+      setLoading(false);
+      return;
+    }
+    
+    if (!branch_id || !amount || !action) {
+      showToast("Please fill all fields", "error");
+      setLoading(false);
+      return;
+    }
+    
+    if (parseFloat(amount) <= 0) {
+      showToast("Amount must be greater than 0", "error");
+      setLoading(false);
+      return;
+    }
+    
+    console.log('Submitting transaction:', { account_id, branch_id, amount, action });
+    
+    try {
+      const body = { account_id, branch_id, amount, action };
+      
+      // Use the improved API request helper
+      const data = await makeApiRequest(API_ENDPOINTS.TRANSACTIONS, {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+      
+      if (data.success) {
+        showToast(`Success! ${data.message}`, "success");
+        // Clear form on success
+        SetBrid("");
+        SetAmt("");
+        document.getElementById("inputState").value = "";
+      } else {
+        showToast(`Error: ${data.message || 'Transaction failed'}`, "error");
+      }
+    } catch (error) {
+      console.error('Transaction error:', error);
+      
+      let errorMessage = 'Network error. Please try again.';
+      
+      if (error.message.includes('404')) {
+        errorMessage = 'Account or Branch not found. Please check your inputs.';
+      } else if (error.message.includes('400')) {
+        errorMessage = 'Invalid transaction data. Please check all fields.';
+      } else if (error.message.includes('500')) {
+        errorMessage = 'Server error. Please try again later.';
+      } else if (error.message.includes('Failed to fetch')) {
+        errorMessage = 'Cannot connect to server. Please check your internet connection.';
+      }
+      
+      showToast(errorMessage, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <div>
+      <Toast toast={toast} />
+      <form className="mt-3 mt-md-5 jumbotron transaction-form" onSubmit={DoTransaction}>
+        <h1>Transaction</h1>
+        <hr></hr>
+      
+      <div className="form-group">
+        <label>Account ID</label>
+        <input
+          type="text"
+          className="form-control"
+          id="exampleInputEmail1"
+          value={account_id}
+          disabled
+          required
+        />
+        <label>Branch</label>
+        <select
+          className="form-control"
+          id="branchSelect"
+          value={branch_id}
+          onChange={(e) => SetBrid(e.target.value)}
+          disabled={loading}
+          required
+        >
+          <option value="">Select Branch</option>
+          {branches.map(b => (
+            <option key={b.branch_id} value={b.branch_id}>
+              {b.name} (ID: {b.branch_id})
+            </option>
+          ))}
+        </select>
+        <label>Amount</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0.01"
+          className="form-control"
+          id="amountInput"
+          value={amount}
+          onChange={(e) => SetAmt(e.target.value)}
+          placeholder="Enter amount"
+          disabled={loading}
+          required
+        />
+        <label>Action</label>
+        <select id="inputState" className="form-control" disabled={loading} required>
+          <option value="">Select Action</option>
+          <option value="Deposit">Deposit</option>
+          <option value="Withdraw">Withdraw</option>
+        </select>
+      </div>
+
+      <div className="transaction-buttons d-flex flex-column flex-sm-row">
+        <button type="submit" className="btn btn-primary mb-2 mb-sm-0 mr-sm-3" disabled={loading}>
+          {loading ? 'Processing...' : 'Submit Transaction'}
+        </button>
+        
+        <button type="button" className="btn btn-secondary" onClick={() => window.history.back()}>
+          Back to Account
+        </button>
+      </div>
+    </form>
+    </div>
+  );
+};
+
+export default FormTransaction;
